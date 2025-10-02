@@ -1,13 +1,14 @@
-import { useState } from 'react';
 import Box from '@mui/material/Box';
 import InputLabel from '@mui/material/InputLabel';
 import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
-import Select from '@mui/material/Select';
+import Select, { type SelectChangeEvent } from '@mui/material/Select';
+import { type SelectBoxProps } from '../types';
 
-function SelectBox({ users, selectedUser, setSelectedUser }: any) {
-
-
+function SelectBox({ users, selectedUser, setSelectedUser }: SelectBoxProps) {
+    const handleChange = (event: SelectChangeEvent<number>) => {
+        setSelectedUser(Number(event.target.value));
+    };
 
     return (
         <Box className="mb-3" sx={{ maxWidth: "400px" }}>
@@ -18,14 +19,12 @@ function SelectBox({ users, selectedUser, setSelectedUser }: any) {
                     id="demo-simple-select"
                     value={selectedUser}
                     label="Users"
-                    onChange={(e) => setSelectedUser(e.target.value)}
+                    onChange={handleChange}
                 >
-                    {
-                        users.map((user: any) => (
-                            <MenuItem key={user.id} value={user.id}>{user.name}</MenuItem>
-                        ))
-                    }
-
+                    <MenuItem value={0}>All</MenuItem>
+                    {users.map((user) => (
+                        <MenuItem key={user.id} value={user.id}>{user.name}</MenuItem>
+                    ))}
                 </Select>
             </FormControl>
         </Box >

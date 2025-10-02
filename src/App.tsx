@@ -1,26 +1,45 @@
-import { Routes, Route,Link } from "react-router"
+import { Routes, Route } from "react-router-dom"
 import Home from "./pages/Home"
-import PageNotFound from "./pages/PageNotFound"
-import Comment from "./pages/Comment"
+import MyContextApi from "./hooks/MyContextApi"
+import { use, useContext, type ReactElement } from "react"
+import { ToastContainer } from "react-toastify"
+import Header from "./components/Header"
+import Login from "./pages/Login"
+import Register from "./pages/Register"
+import Admin from "./pages/admin/Admin"
+import ProtectedRoute from "./utils"
+import Shop from "./hooks/useShop"
+import Chef from "./pages/admin/component/Chef"
 
-function App() {
+
+function App(): ReactElement {
+
+
     return (
-        <div className="container py-3" >
-
-            <header>
-                <ul className="d-flex gap-3 list-unstyled">
-                    <li><Link to="/">Logo</Link></li>
-                </ul>
-                <hr />
-            </header>
-
+        <>
             <Routes>
-                <Route index element={<Home />} />
-                <Route path="posts/:postId/comments" element={<Comment/>} />
-                <Route path="*" element={<PageNotFound />} />
-            </Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/cart" element={<Shop />} />"
+                <Route path="/admin" element={
+                    <ProtectedRoute role={"ADMIN"}>
+                        <Admin />
+                    </ProtectedRoute>
 
-        </div>
+                } >
+                   
+                </Route>
+                <Route path="/chef" element={<ProtectedRoute role={"ADMIN", "CHEF"}>
+                        <Chef />
+                    </ProtectedRoute>} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                 <Route path="/admin/*" element={<Admin />} />
+                 <Route path="/chef/*" element={<Chef />} />
+
+
+            </Routes>
+            <ToastContainer />
+        </>
     )
 }
 

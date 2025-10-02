@@ -1,42 +1,38 @@
-import { use, useState } from "react"
-import SelectBox from "../components/SelectBox"
-import usePost from "../hooks/usePost"
-import useUsers from "../hooks/useUsers"
-import { useNavigate } from "react-router-dom"
+import { useState } from "react"
+import Header from "../components/Header"
+import Main1 from "../components/Main1"
+import Main2 from "../components/Main2"
+import Main3 from "../components/Main3"
+import Main4 from "../components/Main4"
+import Main5 from "../components/Main5"
+import Main6 from "../components/Main6"
+import Main7 from "../components/Main7"
+import Main8 from "../components/Main8"
+import Main9 from "../components/Main9"
+
 
 function Home() {
+  
 
-    const [selectedUser, setSelectedUser] = useState(0)
-    const { posts, isLoading } = usePost(selectedUser)
-    const { users } = useUsers()
-    const navigate = useNavigate();
-
-
-    if (isLoading) {
-        return <div>Loading...</div>
-    }
-
-
+  
 
     return (
-        <div>
-            <h1>Post</h1>
-            <SelectBox selectedUser={selectedUser} setSelectedUser={setSelectedUser} users={users} />
-            <div className="row">
-                {
-                    posts.map((post: any) => (
-                        <div className="col-3 mb-3" key={post.id}>
-                            <div className="card">
-                                <div className="card-body">
-                                    <h5 className="card-title">{post.title}</h5>
-                                    <p className="card-text">{post.body}</p>
-                                    <button onClick={() => navigate(`/posts/${post.id}/comments`)}  >comments</button>
-                                </div>
-                            </div>
-                        </div>
-                    ))
-                }
-            </div>
+        <div id="home">
+            <Header />
+            <Main1/>
+            <Main2/>
+            <Main3/>
+            <Main4/>
+            <Main5/>
+            <Main6/>
+            <Main7/>
+            <Main8/>
+            <Main9/>
+
+
+
+
+            
         </div>
     )
 }
