@@ -54,7 +54,8 @@ function Header() {
      
     >
       <div className="logo">
-        <div className="img"></div>
+        <div className="img">
+         <img src="../dist/assets/SOB READY.png" alt="" /></div>
       </div>
 
       <div className="box">
