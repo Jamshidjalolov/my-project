@@ -1,374 +1,206 @@
-import React, { useEffect, useState } from "react";
-import { collection, getDocs, query, where, addDoc } from "firebase/firestore";
-import { db } from "../pages/admin/component/Firebase";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiFetch, resolveImageUrl } from "../lib/api";
+import { addToCart, getCart, subscribeCart } from "../lib/cart";
+import { getToken } from "../lib/auth";
 
 interface Product {
-  id: string;
+  id: number;
   name: string;
-  narxi: number;
-  keyingi_narx?: number;
-  image: string;
-  categoryId: string;
+  price: number;
+  discount_price?: number | null;
+  image?: string | null;
+  category_id: number;
 }
 
-interface Rating {
-  productId: string;
-  value: number;
+interface Review {
+  product_id: number;
+  rating: number;
 }
 
 interface Props {
-  selectedCategory: string;
+  selectedCategoryId: number | "all";
 }
 
-function Kard({ selectedCategory }: Props) {
+function Kard({ selectedCategoryId }: Props) {
   const [products, setProducts] = useState<Product[]>([]);
-  const [cartItems, setCartItems] = useState<string[]>([]);
-  const [ratings, setRatings] = useState<Rating[]>([]);
-  const [confirmModal, setConfirmModal] = useState<{ show: boolean; product: Product | null; goToCart?: boolean }>({
-    show: false,
-    product: null,
-    goToCart: false,
-  });
-  const [isLoading, setIsLoading] = useState(false); // Savat uchun
-  const [isProductsLoading, setIsProductsLoading] = useState(true); // Mahsulotlarni olish uchun
+  const [cartItems, setCartItems] = useState<number[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [pauseAutoScroll, setPauseAutoScroll] = useState(false);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
+  const listRef = useRef<HTMLDivElement | null>(null);
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function fetchData() {
+    const sync = () => {
+      const cart = getCart();
+      setCartItems(cart.map((item) => item.product_id));
+    };
+    sync();
+    const unsubscribe = subscribeCart(sync);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
       try {
         setIsProductsLoading(true);
-        let q;
-        if (selectedCategory === "all") {
-          q = collection(db, "product");
-        } else {
-          q = query(collection(db, "product"), where("category", "==", selectedCategory));
-        }
-
-        const querySnapshot = await getDocs(q);
-        const data: Product[] = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as Product),
-        }));
+        const query = selectedCategoryId === "all" ? "" : `?category_id=${selectedCategoryId}`;
+        const data = await apiFetch<Product[]>(`/products/${query}`);
         setProducts(data);
       } catch (err) {
         console.error("Error fetching products:", err);
       } finally {
         setIsProductsLoading(false);
       }
-    }
-    fetchData();
-  }, [selectedCategory]);
+    };
+    fetchProducts();
+  }, [selectedCategoryId]);
 
   useEffect(() => {
-    async function fetchCart() {
-      try {
-        const snapshot = await getDocs(collection(db, "buy"));
-        const ids = snapshot.docs.map((doc) => (doc.data() as any).productId);
-        setCartItems(ids);
-      } catch (err) {
-        console.error("Error fetching cart:", err);
+    const el = listRef.current;
+    if (!el) return;
+    let direction: 1 | -1 = 1;
+    let rafId = 0;
+
+    const tick = () => {
+      if (!el) return;
+      if (!pauseAutoScroll) {
+        const maxScroll = el.scrollWidth - el.clientWidth;
+        if (maxScroll > 0) {
+          el.scrollLeft += direction * 0.6;
+          if (el.scrollLeft >= maxScroll - 1) direction = -1;
+          if (el.scrollLeft <= 0) direction = 1;
+        }
       }
-    }
-    fetchCart();
-  }, []);
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [products.length, pauseAutoScroll]);
 
   useEffect(() => {
-    async function fetchRatings() {
+    const fetchReviews = async () => {
       try {
-        const snapshot = await getDocs(collection(db, "ratings"));
-        const data: Rating[] = snapshot.docs.map((doc) => doc.data() as Rating);
-        setRatings(data);
+        const data = await apiFetch<Review[]>("/reviews/");
+        setReviews(data);
       } catch (err) {
-        console.error("Error fetching ratings:", err);
+        console.error("Error fetching reviews:", err);
       }
-    }
-    fetchRatings();
+    };
+    fetchReviews();
   }, []);
 
-  const handleRating = async (productId: string, value: number) => {
+  const handleRating = async (productId: number, value: number) => {
+    if (!getToken()) {
+      navigate("/login");
+      return;
+    }
     try {
-      await addDoc(collection(db, "ratings"), { productId, value, createdAt: new Date() });
-      setRatings((prev) => [...prev, { productId, value }]);
-      alert(`Siz ${value} ⭐ baho berdingiz`);
+      await apiFetch("/reviews/", {
+        method: "POST",
+        auth: true,
+        body: JSON.stringify({ product_id: productId, rating: value }),
+      });
+      setReviews((prev) => [...prev, { product_id: productId, rating: value }]);
+      alert(`Siz ${value} baho berdingiz`);
     } catch (err) {
       console.error("Error saving rating:", err);
     }
   };
 
-  const getAverageRating = (productId: string) => {
-    const productRatings = ratings.filter((r) => r.productId === productId);
+  const getAverageRating = (productId: number) => {
+    const productRatings = reviews.filter((r) => r.product_id === productId);
     if (productRatings.length === 0) return 0;
-    const sum = productRatings.reduce((acc, r) => acc + r.value, 0);
+    const sum = productRatings.reduce((acc, r) => acc + r.rating, 0);
     return sum / productRatings.length;
   };
 
   const handleBuyNow = (product: Product) => {
     if (cartItems.includes(product.id)) {
-      setConfirmModal({ show: true, product, goToCart: true });
-    } else {
-      setConfirmModal({ show: true, product, goToCart: false });
+      navigate("/cart");
+      return;
     }
-  };
 
-  const confirmPurchase = async () => {
-    if (!confirmModal.product) return;
-    const product = confirmModal.product;
-
-    try {
-      setIsLoading(true);
-
-      if (confirmModal.goToCart) {
-        navigate("/cart");
-      } else {
-        await addDoc(collection(db, "buy"), {
-          productId: product.id,
-          name: product.name,
-          narxi: Number(product.narxi),
-          keyingi_narx: product.keyingi_narx ? Number(product.keyingi_narx) : null,
-          image: product.image,
-          createdAt: new Date(),
-          count: 1,
-        });
-        setCartItems((prev) => [...prev, product.id]);
-        alert(`${product.name} savatga qo'shildi ✅`);
-      }
-    } catch (err) {
-      console.error("Error adding to cart:", err);
-      alert("Xatolik yuz berdi, iltimos qayta urinib ko‘ring");
-    } finally {
-      setIsLoading(false);
-      setConfirmModal({ show: false, product: null });
-    }
-  };
-
-  const cancelPurchase = () => {
-    if (isLoading) return;
-    setConfirmModal({ show: false, product: null });
+    addToCart({
+      product_id: product.id,
+      name: product.name,
+      price: product.price,
+      discount_price: product.discount_price ?? null,
+      image: product.image ?? null,
+      quantity: 1,
+    });
+    setCartItems((prev) => [...prev, product.id]);
   };
 
   if (isProductsLoading) {
     return (
-      <div
-        style={{
-          width: "100%",
-          height: "300px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <div
-          style={{
-            width: "50px",
-            height: "50px",
-            border: "5px solid #f3f3f3",
-            borderTop: "5px solid #E21A43",
-            borderRadius: "50%",
-            animation: "spin 1s linear infinite",
-          }}
-        ></div>
-
-        <style>
-          {`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          `}
-        </style>
+      <div className="product-loading">
+        <div className="spinner" />
+        <p>Yuklanmoqda...</p>
       </div>
     );
   }
 
   return (
     <div
-      className="product-row"
-      style={{
-        display: "flex",
-        gap: "15px",
-        overflowX: "auto",
-        padding: "10px",
-      }}
+      className="product-grid"
+      ref={listRef}
+      onMouseEnter={() => setPauseAutoScroll(true)}
+      onMouseLeave={() => setPauseAutoScroll(false)}
     >
       {products.map((product) => {
         const avgRating = getAverageRating(product.id);
+        const inCart = cartItems.includes(product.id);
+
         return (
-          <div
-            key={product.id}
-            className="product-card"
-            style={{
-              border: "1px solid #ddd",
-              padding: "10px",
-              borderRadius: "10px",
-              width: "220px",
-              minWidth: "220px",
-              textAlign: "center",
-              transition: "transform 0.3s ease, box-shadow 0.3s ease",
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLDivElement).style.transform = "translateY(-5px)";
-              (e.currentTarget as HTMLDivElement).style.boxShadow = "0px 6px 15px rgba(0,0,0,0.2)";
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLDivElement).style.transform = "translateY(0)";
-              (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
-            }}
-          >
-            <img
-              src={product.image}
-              alt={product.name}
-              style={{
-                width: "120px",
-                height: "110px",
-                objectFit: "cover",
-                borderRadius: "8px",
-              }}
-            />
-            <h3>{product.name}</h3>
-            <p>
-              {product.keyingi_narx ? (
-                <>
-                  <span style={{ textDecoration: "line-through", marginRight: "8px" }}>
-                    ${product.narxi}
-                  </span>
-                  <span style={{ color: "red" }}>${product.keyingi_narx}</span>
-                </>
+          <div key={product.id} className={`product-card ${inCart ? "in-cart" : ""}`}>
+            <div className="product-media">
+              {product.image ? (
+                <img src={resolveImageUrl(product.image)} alt={product.name} />
               ) : (
-                <>${product.narxi}</>
+                <div className="product-placeholder" />
               )}
-            </p>
-
-            <div style={{ margin: "10px 0" }}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <span
-                  key={star}
-                  onClick={() => handleRating(product.id, star)}
-                  style={{
-                    cursor: "pointer",
-                    fontSize: "20px",
-                    color: star <= avgRating ? "gold" : "#ccc",
-                  }}
-                >
-                  ★
-                </span>
-              ))}
-              <div style={{ fontSize: "12px", color: "#555" }}>
-                O‘rtacha baho: {avgRating.toFixed(1)} ⭐
-              </div>
+              {product.discount_price ? <span className="product-tag">Sale</span> : null}
             </div>
+            <div className="product-body">
+              <h3>{product.name}</h3>
+              <div className="product-price">
+                {product.discount_price ? (
+                  <>
+                    <span className="price-old">{product.price}</span>
+                    <span className="price-new">{product.discount_price}</span>
+                  </>
+                ) : (
+                  <span className="price-new">{product.price}</span>
+                )}
+              </div>
 
-            <button
-              onClick={() => handleBuyNow(product)}
-              style={{
-                background: cartItems.includes(product.id) ? "#007bff" : "#E21A43",
-                color: "white",
-                padding: "8px 15px",
-                borderRadius: "8px",
-                border: "none",
-                cursor: "pointer",
-              }}
-            >
-              {cartItems.includes(product.id) ? "Go to Cart" : "Buy Now"}
-            </button>
+              <div className="product-rating">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    className={`star-button ${star <= avgRating ? "active" : ""}`}
+                    onClick={() => handleRating(product.id, star)}
+                    aria-label={`Rate ${star}`}
+                  >
+                    ★
+                  </button>
+                ))}
+                <span className="rating-value">{avgRating.toFixed(1)}</span>
+              </div>
+
+              <button className="product-btn" type="button" onClick={() => handleBuyNow(product)}>
+                {inCart ? "Go to cart" : "Buy now"}
+              </button>
+            </div>
           </div>
         );
       })}
 
-      {confirmModal.show && confirmModal.product && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: "20px",
-              borderRadius: "10px",
-              width: "350px",
-              textAlign: "center",
-              display: "flex",
-              flexDirection: "column",
-              gap: "15px",
-            }}
-          >
-            <h2>
-              {confirmModal.goToCart
-                ? "Savatga o'tmoqchimisiz?"
-                : ` ${confirmModal.product.name} sotib olmoqchimisiz?`}
-            </h2>
-            <div style={{ display: "flex", justifyContent: "space-around" }}>
-              <button
-                onClick={confirmPurchase}
-                disabled={isLoading}
-                style={{
-                  padding: "8px 15px",
-                  background: isLoading ? "#aaa" : "#4caf50",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                }}
-              >
-                {isLoading ? (
-                  <>
-                    <div
-                      style={{
-                        width: "16px",
-                        height: "16px",
-                        border: "2px solid #fff",
-                        borderTop: "2px solid transparent",
-                        borderRadius: "50%",
-                        animation: "spin 1s linear infinite",
-                      }}
-                    ></div>
-                    Iltimos kuting...
-                  </>
-                ) : (
-                  "Ha"
-                )}
-              </button>
-              <button
-                onClick={cancelPurchase}
-                disabled={isLoading}
-                style={{
-                  padding: "8px 15px",
-                  background: "#f44336",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                }}
-              >
-                Yo‘q
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>
-        {`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        `}
-      </style>
     </div>
   );
 }

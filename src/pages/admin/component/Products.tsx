@@ -1,13 +1,4 @@
-import React, { useEffect, useState } from "react";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
-import { db } from "./Firebase";
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -26,168 +17,235 @@ import {
   FormControl,
   InputLabel,
 } from "@mui/material";
+import { apiFetch } from "../../../lib/api";
+import AdminHeader from "./AdminHeader";
+
+interface Category {
+  id: number;
+  name: string;
+}
 
 interface Product {
-  id: string;
+  id: number;
   name: string;
-  narxi: number;
-  keyingi_narx?: number;
-  image: string;
-  category: string; 
+  description?: string | null;
+  price: number;
+  discount_price?: number | null;
+  image?: string | null;
+  category_id: number;
+  is_available: boolean;
 }
 
 function Products() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [formData, setFormData] = useState<Partial<Product>>({
     name: "",
-    narxi: 0,
-    keyingi_narx: 0,
+    price: 0,
+    discount_price: 0,
     image: "",
-    category: "",
+    category_id: 0,
+    is_available: true,
   });
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
   const [open, setOpen] = useState(false);
+  const [filterCategoryId, setFilterCategoryId] = useState<number | "all">("all");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchProducts();
-    fetchCategories();
+    const load = async () => {
+      setLoading(true);
+      await Promise.all([fetchProducts(), fetchCategories()]);
+      await new Promise((r) => setTimeout(r, 400));
+      setLoading(false);
+    };
+    load();
   }, []);
 
   async function fetchProducts() {
-    const snapshot = await getDocs(collection(db, "product"));
-    const list: Product[] = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Product),
-    }));
+    const list = await apiFetch<Product[]>("/products/");
     setProducts(list);
   }
 
   async function fetchCategories() {
-    const snapshot = await getDocs(collection(db, "category"));
-    const list: string[] = snapshot.docs.map((d) => (d.data() as any).name);
+    const list = await apiFetch<Category[]>("/categories/");
     setCategories(list);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.name || !formData.narxi || !formData.category) {
+    if (!formData.name || !formData.price || !formData.category_id) {
       alert("Nom, narx va kategoriya majburiy!");
       return;
     }
 
+    const payload = {
+      name: formData.name,
+      description: formData.description,
+      price: Number(formData.price),
+      discount_price: formData.discount_price ? Number(formData.discount_price) : null,
+      image: formData.image,
+      category_id: Number(formData.category_id),
+      is_available: formData.is_available ?? true,
+    };
+
     try {
       if (editId) {
-        const ref = doc(db, "product", editId);
-        await updateDoc(ref, {
-          ...formData,
-          narxi: Number(formData.narxi),
-          keyingi_narx: formData.keyingi_narx ? Number(formData.keyingi_narx) : null,
+        const updated = await apiFetch<Product>(`/products/${editId}`, {
+          method: "PUT",
+          auth: true,
+          body: JSON.stringify(payload),
         });
-        alert("Mahsulot yangilandi ✅");
+        setProducts(products.map((p) => (p.id === updated.id ? updated : p)));
       } else {
-        await addDoc(collection(db, "product"), {
-          ...formData,
-          narxi: Number(formData.narxi),
-          keyingi_narx: formData.keyingi_narx ? Number(formData.keyingi_narx) : null,
-          createdAt: new Date(),
+        const created = await apiFetch<Product>("/products/", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify(payload),
         });
-        alert("Yangi mahsulot qo‘shildi ✅");
+        setProducts([created, ...products]);
       }
 
       setFormData({
         name: "",
-        narxi: 0,
-        keyingi_narx: 0,
+        price: 0,
+        discount_price: 0,
         image: "",
-        category: "",
+        category_id: 0,
+        is_available: true,
       });
       setEditId(null);
       setOpen(false);
-      fetchProducts();
     } catch (err) {
       console.error(err);
     }
   }
 
-  async function handleDelete(id: string) {
-    if (window.confirm("Mahsulotni o‘chirmoqchimisiz?")) {
-      await deleteDoc(doc(db, "product", id));
-      fetchProducts();
+  async function handleDelete(id: number) {
+    if (window.confirm("Mahsulotni o'chirmoqchimisiz?")) {
+      await apiFetch(`/products/${id}`, { method: "DELETE", auth: true });
+      setProducts(products.filter((p) => p.id !== id));
     }
   }
 
   function handleEdit(product: Product) {
     setFormData({
       name: product.name,
-      narxi: product.narxi,
-      keyingi_narx: product.keyingi_narx || 0,
-      image: product.image,
-      category: product.category,
+      description: product.description ?? "",
+      price: product.price,
+      discount_price: product.discount_price || 0,
+      image: product.image ?? "",
+      category_id: product.category_id,
+      is_available: product.is_available,
     });
     setEditId(product.id);
     setOpen(true);
   }
 
+  const categoryName = (id: number) => categories.find((c) => c.id === id)?.name ?? "-";
+
+  const filteredProducts =
+    filterCategoryId === "all"
+      ? products
+      : products.filter((p) => p.category_id === filterCategoryId);
+
   return (
-    <Box p={5}>
-      <Typography variant="h4" gutterBottom>
-        📦 Products
-      </Typography>
+    <Box p={5} className="admin-section">
+      <AdminHeader
+        title="Products"
+        subtitle="Barcha mahsulotlar va narxlar boshqaruvi"
+        right={
+          <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+              {[{ id: "all", name: "Barchasi" }, ...categories].map((cat) => {
+                const isActive =
+                  cat.id === "all" ? filterCategoryId === "all" : filterCategoryId === cat.id;
+                return (
+                  <button
+                    key={String(cat.id)}
+                    type="button"
+                    onClick={() =>
+                      setFilterCategoryId(cat.id === "all" ? "all" : Number(cat.id))
+                    }
+                    className={`admin-hero__pill ${isActive ? "is-active" : ""}`}
+                  >
+                    {cat.name}
+                  </button>
+                );
+              })}
+            </Box>
+            <Button
+              className="admin-primary-btn"
+              variant="contained"
+              onClick={() => {
+                setEditId(null);
+                setFormData({
+                  name: "",
+                  price: 0,
+                  discount_price: 0,
+                  image: "",
+                  category_id: 0,
+                  is_available: true,
+                });
+                setOpen(true);
+              }}
+            >
+              Add Product
+            </Button>
+          </Box>
+        }
+      />
 
-      <Button
-        variant="contained"
-        color="success"
-        onClick={() => {
-          setEditId(null);
-          setFormData({
-            name: "",
-            narxi: 0,
-            keyingi_narx: 0,
-            image: "",
-            category: "",
-          });
-          setOpen(true);
-        }}
-        sx={{ mb: 2 }}
-      >
-        ➕ Add Product
-      </Button>
+      <Box className="admin-scroll">
+        {loading ? (
+          <Grid container spacing={2}>
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <Grid key={idx} size={{ xs: 12, sm: 6, md: 4 }}>
+                <div className="admin-skeleton admin-skeleton-card" style={{ height: 280 }} />
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Grid container spacing={2}>
+            {filteredProducts.map((p) => (
+              <Grid key={p.id} size={{ xs: 12, sm: 6, md: 4 }}>
+                <Card className="admin-card admin-product-card">
+                  {p.image && <CardMedia component="img" height="180" image={p.image} alt={p.name} />}
+                  <CardContent>
+                    <Typography variant="h6">{p.name}</Typography>
+                    <Typography>
+                      <b>{p.price}</b>{" "}
+                      {p.discount_price ? (
+                        <span style={{ color: "red" }}>→ {p.discount_price}</span>
+                      ) : null}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Category: {categoryName(p.category_id)}
+                    </Typography>
 
-      <Box sx={{ maxHeight: "500px", overflowY: "auto", pr: 1 }}>
-        <Grid container spacing={2}>
-          {products.map((p) => (
-            <Grid item xs={12} sm={6} md={4} key={p.id}>
-              <Card sx={{ boxShadow: 3, borderRadius: 2 }}>
-                <CardMedia component="img" height="180" image={p.image} alt={p.name} />
-                <CardContent>
-                  <Typography variant="h6">{p.name}</Typography>
-                  <Typography>
-                    <b>${p.narxi}</b>{" "}
-                    {p.keyingi_narx ? (
-                      <span style={{ color: "red" }}>→ ${p.keyingi_narx}</span>
-                    ) : null}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Category: {p.category}
-                  </Typography>
-
-                  <Box mt={2} display="flex" gap={1}>
-                    <Button variant="contained" color="warning" onClick={() => handleEdit(p)}>
-                      ✏️ Edit
-                    </Button>
-                    <Button variant="contained" color="error" onClick={() => handleDelete(p.id)}>
-                      🗑 Delete
-                    </Button>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+                    <Box mt={2} display="flex" gap={1}>
+                      <Button className="admin-warning-btn" variant="contained" onClick={() => handleEdit(p)}>
+                        Edit
+                      </Button>
+                      <Button className="admin-danger-btn" variant="contained" onClick={() => handleDelete(p.id)}>
+                        Delete
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
       </Box>
 
-      <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        fullWidth
+        maxWidth="sm"
+        PaperProps={{ className: "admin-dialog" }}
+      >
         <DialogTitle>{editId ? "Edit Product" : "Add Product"}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -201,18 +259,16 @@ function Products() {
             <TextField
               label="Narxi"
               type="number"
-              value={formData.narxi || ""}
-              onChange={(e) => setFormData({ ...formData, narxi: Number(e.target.value) })}
+              value={formData.price || ""}
+              onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
               fullWidth
               required
             />
             <TextField
               label="Chegirma narxi"
               type="number"
-              value={formData.keyingi_narx || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, keyingi_narx: Number(e.target.value) })
-              }
+              value={formData.discount_price || ""}
+              onChange={(e) => setFormData({ ...formData, discount_price: Number(e.target.value) })}
               fullWidth
             />
             <TextField
@@ -221,20 +277,19 @@ function Products() {
               onChange={(e) => setFormData({ ...formData, image: e.target.value })}
               fullWidth
             />
-           <FormControl fullWidth required>
-  <InputLabel>Kategoriya</InputLabel>
-  <Select
-    value={formData.category || ""}
-    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-  >
-    {[...new Set(products.map((p) => p.category))].map((cat) => (
-      <MenuItem key={cat} value={cat}>
-        {cat}
-      </MenuItem>
-    ))}
-  </Select>
-</FormControl>
-
+            <FormControl fullWidth required>
+              <InputLabel>Kategoriya</InputLabel>
+              <Select
+                value={formData.category_id || ""}
+                onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
+              >
+                {categories.map((cat) => (
+                  <MenuItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpen(false)} color="secondary">

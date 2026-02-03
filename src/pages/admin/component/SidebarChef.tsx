@@ -1,14 +1,15 @@
-import { useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { clearToken } from "../../../lib/auth";
 
 function SidebarChef() {
-  const [isOpen, setIsOpen] = useState(true)
-  const location = useLocation()
+  const [isOpen, setIsOpen] = useState(true);
+  const location = useLocation();
 
   const handleLogout = () => {
-    window.location.href = "/"
-    localStorage.removeItem("user")
-  }
+    clearToken();
+    window.location.href = "/";
+  };
 
   const linkStyle = {
     padding: "12px 16px",
@@ -20,7 +21,7 @@ function SidebarChef() {
     fontWeight: "500",
     display: "block",
     transition: "all 0.3s",
-  }
+  };
 
   return (
     <div
@@ -32,22 +33,12 @@ function SidebarChef() {
     >
       <div className="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary">
         {isOpen && <h2 className="m-0">Chef</h2>}
-        <button
-          className="btn btn-outline-light btn-sm"
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          {isOpen ? "⬅" : "➡"}
+        <button className="btn btn-outline-light btn-sm" onClick={() => setIsOpen(!isOpen)}>
+          {isOpen ? "<" : ">"}
         </button>
       </div>
 
-      <div
-        style={{
-          display: isOpen ? "flex" : "none",
-          flexDirection: "column",
-          transition: "all 0.3s",
-        }}
-      >
-       
+      <div style={{ display: isOpen ? "flex" : "none", flexDirection: "column", transition: "all 0.3s" }}>
         <Link
           to="/chef/orders"
           style={{
@@ -56,7 +47,7 @@ function SidebarChef() {
           }}
           className="sidebar-link"
         >
-          📦 Orders
+          Orders
         </Link>
       </div>
 
@@ -70,7 +61,7 @@ function SidebarChef() {
             fontWeight: "500",
           }}
         >
-          {isOpen && <span>🚪 Exit</span>}
+          {isOpen && <span>Exit</span>}
         </button>
       </div>
 
@@ -84,7 +75,7 @@ function SidebarChef() {
         }
       `}</style>
     </div>
-  )
+  );
 }
 
-export default SidebarChef
+export default SidebarChef;

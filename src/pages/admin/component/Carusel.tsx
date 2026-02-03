@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { collection, getDocs, doc, deleteDoc, updateDoc, addDoc } from "firebase/firestore";
-import { db } from "./Firebase";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../../../lib/api";
+import AdminHeader from "./AdminHeader";
 
 interface Slide {
-  id: string;
+  id: number;
   title: string;
   text: string;
   img: string;
@@ -25,23 +25,20 @@ function Carusel() {
 
   const fetchSlides = async () => {
     try {
-      const snapshot = await getDocs(collection(db, "slides"));
-      const list: Slide[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<Slide, "id">),
-      }));
-      setSlides(list);
-      setLoading(false);
+      const data = await apiFetch<Slide[]>("/slides/");
+      setSlides(data);
     } catch (err) {
       console.error("Slide fetch error:", err);
+    } finally {
+      await new Promise((r) => setTimeout(r, 400));
       setLoading(false);
     }
   };
 
-  const deleteSlide = async (id: string) => {
+  const deleteSlide = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this slide?")) return;
     try {
-      await deleteDoc(doc(db, "slides", id));
+      await apiFetch(`/slides/${id}`, { method: "DELETE", auth: true });
       setSlides(slides.filter((s) => s.id !== id));
     } catch (err) {
       console.error("Delete error:", err);
@@ -68,24 +65,19 @@ function Carusel() {
     if (!modalTitle || !modalText || !modalImg) return alert("All fields are required");
     try {
       if (editingSlide) {
-        
-        const slideRef = doc(db, "slides", editingSlide.id);
-        await updateDoc(slideRef, { title: modalTitle, text: modalText, img: modalImg });
-        setSlides(
-          slides.map((s) =>
-            s.id === editingSlide.id
-              ? { ...s, title: modalTitle, text: modalText, img: modalImg }
-              : s
-          )
-        );
-      } else {
-        
-        const docRef = await addDoc(collection(db, "slides"), {
-          title: modalTitle,
-          text: modalText,
-          img: modalImg,
+        const updated = await apiFetch<Slide>(`/slides/${editingSlide.id}`, {
+          method: "PUT",
+          auth: true,
+          body: JSON.stringify({ title: modalTitle, text: modalText, img: modalImg }),
         });
-        setSlides([...slides, { id: docRef.id, title: modalTitle, text: modalText, img: modalImg }]);
+        setSlides(slides.map((s) => (s.id === updated.id ? updated : s)));
+      } else {
+        const created = await apiFetch<Slide>("/slides/", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({ title: modalTitle, text: modalText, img: modalImg }),
+        });
+        setSlides([created, ...slides]);
       }
       setShowModal(false);
     } catch (err) {
@@ -93,152 +85,81 @@ function Carusel() {
     }
   };
 
-  if (loading) return <p>Loading slides...</p>;
+  if (loading)
+    return (
+      <div className="admin-section">
+        <div className="admin-section__header">
+          <div>
+            <h2>Carusel</h2>
+            <p className="admin-section__sub">Slide kontentini boshqarish</p>
+          </div>
+        </div>
+        <div className="admin-scroll">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="admin-skeleton admin-skeleton-card" style={{ height: 140, marginBottom: 14 }} />
+          ))}
+        </div>
+      </div>
+    );
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{  marginBottom: "20px" }}>📅Carusel</h1>
+    <div className="admin-section">
+      <AdminHeader
+        title="Carusel"
+        subtitle="Slide kontentini boshqarish"
+        right={
+          <button onClick={openAddModal} className="admin-primary-btn">
+            Add Carusel
+          </button>
+        }
+      />
 
-      <button
-        onClick={openAddModal}
-        style={{
-          marginBottom: "20px",
-          padding: "10px 20px",
-          background: "#4caf50",
-          color: "#fff",
-          border: "none",
-          borderRadius: "5px",
-          cursor: "pointer",
-          fontSize: "16px",
-        }}
-      >
-        Add Carusel
-      </button>
-
-      {slides.map((slide) => (
-        <div
-          key={slide.id}
-          style={{
-            border: "1px solid #ccc",
-            borderRadius: "8px",
-            padding: "15px",
-            marginBottom: "15px",
-            display: "flex",
-            alignItems: "center",
-            gap: "20px",
-          }}
-        >
-          <img
-            src={slide.img}
-            alt={slide.title}
-            style={{ width: "150px", height: "100px", objectFit: "cover", borderRadius: "5px" }}
-          />
-          <div style={{ flex: 1 }}>
-            <h3>{slide.title}</h3>
-            <p>{slide.text}</p>
+      <div className="admin-scroll">
+        {slides.map((slide) => (
+          <div key={slide.id} className="admin-slide-card">
+            <img src={slide.img} alt={slide.title} />
+            <div className="admin-slide-card__body">
+              <h3>{slide.title}</h3>
+              <p>{slide.text}</p>
+            </div>
+            <div className="admin-slide-card__actions">
+              <button onClick={() => openEditModal(slide)} className="admin-warning-btn">
+                Edit
+              </button>
+              <button onClick={() => deleteSlide(slide.id)} className="admin-danger-btn">
+                Delete
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => openEditModal(slide)}
-            style={{
-              padding: "8px 12px",
-              background: "#2196f3",
-              color: "#fff",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-              marginRight: "5px",
-            }}
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => deleteSlide(slide.id)}
-            style={{
-              padding: "8px 12px",
-              background: "#f44336",
-              color: "#fff",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-          >
-            Delete
-          </button>
-        </div>
-      ))}
+        ))}
+      </div>
 
       {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: "20px",
-              borderRadius: "10px",
-              width: "400px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-            }}
-          >
+        <div className="admin-modal">
+          <div className="admin-modal__card">
             <h2>{editingSlide ? "Edit Slide" : "Add New Slide"}</h2>
             <input
               type="text"
               placeholder="Title"
               value={modalTitle}
               onChange={(e) => setModalTitle(e.target.value)}
-              style={{ padding: "8px", fontSize: "14px" }}
             />
             <textarea
               placeholder="Text"
               value={modalText}
               onChange={(e) => setModalText(e.target.value)}
-              style={{ padding: "8px", fontSize: "14px" }}
             />
             <input
               type="text"
               placeholder="Image URL"
               value={modalImg}
               onChange={(e) => setModalImg(e.target.value)}
-              style={{ padding: "8px", fontSize: "14px" }}
             />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  padding: "8px 12px",
-                  background: "#f44336",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                }}
-              >
+            <div className="admin-modal__actions">
+              <button onClick={() => setShowModal(false)} className="admin-danger-btn">
                 Cancel
               </button>
-              <button
-                onClick={saveSlide}
-                style={{
-                  padding: "8px 12px",
-                  background: "#4caf50",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={saveSlide} className="admin-primary-btn">
                 {editingSlide ? "Save" : "Add"}
               </button>
             </div>

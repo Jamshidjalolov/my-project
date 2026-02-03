@@ -1,198 +1,160 @@
-import React, { useEffect, useState } from "react";
-import { collection, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { db } from "./Firebase";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../../../lib/api";
+import AdminHeader from "./AdminHeader";
 
-interface Product {
-  id: string;
-  category: string;
+interface Category {
+  id: number;
+  name: string;
+  description?: string | null;
+  image?: string | null;
 }
 
-function ProductsCategoryCRUD() {
-  const [products, setProducts] = useState<Product[]>([]);
+function Categories() {
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [newCategory, setNewCategory] = useState("");
+  const [editId, setEditId] = useState<number | null>(null);
+  const [form, setForm] = useState<Partial<Category>>({
+    name: "",
+    description: "",
+    image: "",
+  });
+  const [showModal, setShowModal] = useState(false);
 
-  const fetchProducts = async () => {
+  const fetchCategories = async () => {
     try {
-      const snapshot = await getDocs(collection(db, "product"));
-      const data: Product[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        category: (docSnap.data() as any).category,
-      }));
-      setProducts(data);
+      const data = await apiFetch<Category[]>("/categories/");
+      setCategories(data);
     } catch (error) {
-      console.error("Xato:", error);
+      console.error("Fetch categories error:", error);
     } finally {
+      await new Promise((r) => setTimeout(r, 400));
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
+    fetchCategories();
   }, []);
 
-  const handleUpdate = async (id: string) => {
-    if (!newCategory.trim()) {
-      alert("Yangi category tanlang!");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name) {
+      alert("Category nomi kerak!");
       return;
     }
     try {
-      const ref = doc(db, "product", id);
-      await updateDoc(ref, { category: newCategory });
-      alert("Category yangilandi ✅");
+      if (editId) {
+        const updated = await apiFetch<Category>(`/categories/${editId}`, {
+          method: "PUT",
+          auth: true,
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            image: form.image,
+          }),
+        });
+        setCategories(categories.map((c) => (c.id === updated.id ? updated : c)));
+      } else {
+        const created = await apiFetch<Category>("/categories/", {
+          method: "POST",
+          auth: true,
+          body: JSON.stringify({
+            name: form.name,
+            description: form.description,
+            image: form.image,
+          }),
+        });
+        setCategories([created, ...categories]);
+      }
+      setForm({ name: "", description: "", image: "" });
       setEditId(null);
-      setNewCategory("");
-      fetchProducts();
+      setShowModal(false);
     } catch (error) {
-      console.error("Yangilashda xato:", error);
+      console.error("Save category error:", error);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("Haqiqatan ham o‘chirmoqchimisiz?")) return;
+  const handleEdit = (category: Category) => {
+    setEditId(category.id);
+    setForm({
+      name: category.name,
+      description: category.description ?? "",
+      image: category.image ?? "",
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Haqiqatan ham o'chirmoqchimisiz?")) return;
     try {
-      await deleteDoc(doc(db, "product", id));
-      alert("Product o‘chirildi 🗑️");
-      fetchProducts();
+      await apiFetch(`/categories/${id}`, { method: "DELETE", auth: true });
+      setCategories(categories.filter((c) => c.id !== id));
     } catch (error) {
-      console.error("O‘chirishda xato:", error);
+      console.error("Delete category error:", error);
     }
   };
-
-  const categories = Array.from(new Set(products.map((p) => p.category)));
 
   return (
-    <div style={{ padding: "20px", margin: "auto", }}>
-      <h2 style={{ marginBottom: "20px", color: "#343a40",textAlign: "center" }}>📂 Categories</h2>
-
-      {loading ? (
-        <p>⏳ Yuklanmoqda...</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "70%",
-              borderCollapse: "collapse",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-              borderRadius: "8px",
-              overflow: "hidden",
-              fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-             margin: "auto",
+    <div className="admin-section">
+      <AdminHeader
+        title="Categories"
+        subtitle="Kategoriya qo'shish va boshqarish"
+        right={
+          <button
+            className="admin-primary-btn"
+            onClick={() => {
+              setEditId(null);
+              setForm({ name: "", description: "", image: "" });
+              setShowModal(true);
             }}
           >
+            Add Category
+          </button>
+        }
+      />
+
+      {loading ? (
+        <div className="admin-scroll">
+          <div className="admin-skeleton admin-skeleton-card" style={{ height: 220 }} />
+        </div>
+      ) : (
+        <div className="admin-scroll">
+          <table className="admin-table">
             <thead>
-              <tr style={{ background: "#495057", color: "#fff", textAlign: "left" }}>
-                <th style={{ padding: "12px 16px" }}>#</th>
-                <th style={{ padding: "12px 16px" }}>Category</th>
-                <th style={{ padding: "12px 16px" }}>Amallar</th>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {products.length > 0 ? (
-                products.map((prod, index) => (
-                  <tr key={prod.id} style={{ borderBottom: "1px solid #dee2e6", transition: "background 0.3s" }}>
-                    <td style={{ padding: "12px 16px" }}>{index + 1}</td>
-                    <td style={{ padding: "12px 16px" }}>
-                      {editId === prod.id ? (
-                        <select
-                          value={newCategory}
-                          onChange={(e) => setNewCategory(e.target.value)}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: "5px",
-                            border: "1px solid #ced4da",
-                            background: "#f8f9fa",
-                            fontSize: "14px",
-                          }}
-                        >
-                          <option value="">-- Category tanlang --</option>
-                          {categories.map((cat, i) => (
-                            <option key={i} value={cat}>
-                              {cat}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        prod.category
-                      )}
-                    </td>
-                    <td style={{ padding: "12px 16px" }}>
-                      {editId === prod.id ? (
-                        <>
-                          <button
-                            onClick={() => handleUpdate(prod.id)}
-                            style={{
-                              marginRight: "8px",
-                              background: "#28a745",
-                              color: "#fff",
-                              padding: "6px 12px",
-                              border: "none",
-                              borderRadius: "5px",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            Saqlash
-                          </button>
-                          <button
-                            onClick={() => setEditId(null)}
-                            style={{
-                              background: "#6c757d",
-                              color: "#fff",
-                              padding: "6px 12px",
-                              border: "none",
-                              borderRadius: "5px",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            ❌ Bekor qilish
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => {
-                              setEditId(prod.id);
-                              setNewCategory(prod.category || "");
-                            }}
-                            style={{
-                              marginRight: "8px",
-                              background: "#0d6efd",
-                              color: "#fff",
-                              padding: "6px 12px",
-                              border: "none",
-                              borderRadius: "5px",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            ✏️ Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(prod.id)}
-                            style={{
-                              background: "#dc3545",
-                              color: "#fff",
-                              padding: "6px 12px",
-                              border: "none",
-                              borderRadius: "5px",
-                              cursor: "pointer",
-                              transition: "all 0.2s",
-                            }}
-                          >
-                            🗑️ Delete
-                          </button>
-                        </>
-                      )}
+              {categories.length > 0 ? (
+                categories.map((cat, index) => (
+                  <tr key={cat.id}>
+                    <td>{index + 1}</td>
+                    <td>{cat.name}</td>
+                    <td>{cat.description || "-"}</td>
+                    <td>
+                      <button
+                        onClick={() => handleEdit(cat)}
+                        className="admin-warning-btn"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(cat.id)}
+                        className="admin-danger-btn"
+                      >
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={3} style={{ textAlign: "center", padding: "16px" }}>
-                    Category topilmadi 😔
+                  <td colSpan={4} style={{ textAlign: "center", padding: "16px" }}>
+                    Category topilmadi
                   </td>
                 </tr>
               )}
@@ -201,16 +163,47 @@ function ProductsCategoryCRUD() {
         </div>
       )}
 
-      <style>{`
-        table tbody tr:hover {
-          background: #f1f3f5;
-        }
-        button:hover {
-          opacity: 0.85;
-        }
-      `}</style>
+      {showModal && (
+        <div className="admin-modal">
+          <div className="admin-modal__card">
+            <h2>{editId ? "Edit Category" : "Add Category"}</h2>
+            <form onSubmit={handleSubmit} className="admin-form">
+              <input
+                type="text"
+                placeholder="Category name"
+                value={form.name || ""}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Description"
+                value={form.description || ""}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Image URL"
+                value={form.image || ""}
+                onChange={(e) => setForm({ ...form, image: e.target.value })}
+              />
+              <div className="admin-modal__actions">
+                <button
+                  type="button"
+                  className="admin-danger-btn"
+                  onClick={() => setShowModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="admin-primary-btn">
+                  {editId ? "Update" : "Create"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-export default ProductsCategoryCRUD;
+export default Categories;

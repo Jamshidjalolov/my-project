@@ -1,158 +1,145 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, onSnapshot, collection, getDocs } from "firebase/firestore";
-import { db } from "../pages/admin/component/Firebase";
-import { Avatar } from "@mui/material";
+import { useEffect, useMemo, useState } from "react";
 import Dropdown from "react-bootstrap/Dropdown";
+import { useAuthRole } from "../hooks/useAuthRole";
+import { clearToken } from "../lib/auth";
+import { apiFetch } from "../lib/api";
+import { getCart, subscribeCart } from "../lib/cart";
 
 function Header() {
   const navigate = useNavigate();
-  const auth = getAuth();
-  const [user, setUser] = useState<any>(null);
-  const [role, setRole] = useState<string>("");
+  const { user, roles } = useAuthRole();
   const [cartCount, setCartCount] = useState<number>(0);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        const userDocRef = doc(db, "users", currentUser.uid);
-        const unsubUser = onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const userData = docSnap.data();
-            setRole(userData.role || "user");
-          } else {
-            setRole("user");
-          }
-        });
-        return () => unsubUser();
-      } else {
-        setUser(null);
-        setRole("");
-      }
-    });
-    return () => unsubscribe();
-  }, [auth]);
+  const initials = useMemo(() => {
+    if (!user) return "G";
+    const source = user.name || user.email || "U";
+    return source.trim().charAt(0).toUpperCase();
+  }, [user]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
+  const handleLogout = () => {
+    clearToken();
     navigate("/");
   };
 
   useEffect(() => {
-    const fetchCartCount = async () => {
-      const querySnapshot = await getDocs(collection(db, "buy"));
-      setCartCount(querySnapshot.size);
+    const updateCount = () => {
+      const items = getCart();
+      const total = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+      setCartCount(total);
     };
-    fetchCartCount();
+    updateCount();
+    const unsubscribe = subscribeCart(updateCount);
+    return () => unsubscribe();
   }, []);
 
+
+
   return (
-    <div
-      className="header"
-     
-    >
-      <div className="logo">
-        <div className="img"></div>
-      </div>
+    <header className="site-header">
+      <div className="site-header__inner">
+        <Link to="/" className="brand">
+          <span className="brand-mark">SOB</span>
+          <span className="brand-text">
+            READY
+            <span className="brand-sub">fresh market</span>
+          </span>
+        </Link>
 
-      <div className="box">
-        <ul >
-          <li><Link to="/" style={{ textDecoration: "none", color: "#333" }}>Home</Link></li>
-          <li><Link to="/" style={{ textDecoration: "none", color: "#333" }}>Category</Link></li>
-          <li><Link to="/" style={{ textDecoration: "none", color: "#333" }}>Shop</Link></li>
-          <li><Link to="/" style={{ textDecoration: "none", color: "#333" }}>Blog</Link></li>
-          <li><Link to="/" style={{ textDecoration: "none", color: "#333" }}>Page</Link></li>
-        </ul>
-      </div>
+        <nav className="site-nav" aria-label="Primary">
+          <ul className="nav-links">
+            <li>
+              <a href="#home">Home</a>
+            </li>
+            <li>
+              <a href="#categories">Category</a>
+            </li>
+            <li>
+              <a href="#shop">Shop</a>
+            </li>
+            <li>
+              <a href="#best-selling">Blog</a>
+            </li>
+            <li>
+              <a href="#footer">Page</a>
+            </li>
+          </ul>
+        </nav>
 
-      <div className="box2" style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-        <input
-          type="search"
-          placeholder="Search..."
-          style={{ padding: "5px 10px", borderRadius: "5px", border: "1px solid #ccc" }}
-        />
-        <button
-          id="btn1"
-          style={{ padding: "6px 10px", borderRadius: "5px", border: "1px solid #ccc", cursor: "pointer" }}
-        >
-          🔎
-        </button>
+          <div className="header-actions">
+            <div className="search">
+              <input type="search" placeholder="Search products..." aria-label="Search" />
+              <button type="button" className="search-btn">
+                Search
+              </button>
+            </div>
 
-        <div
-          style={{ position: "relative", cursor: "pointer" }}
-          onClick={() => navigate("/cart")}
-        >
-          <span style={{ fontSize: "24px", marginLeft: "20px" }}>🛒</span>
-          {cartCount > 0 && (
-            <span
-              style={{
-                position: "absolute",
-                top: "-5px",
-                right: "-10px",
-                background: "#f44336",
-                color: "#fff",
-                borderRadius: "50%",
-                padding: "2px 6px",
-                fontSize: "12px",
-                fontWeight: "bold",
-              }}
-            >
-              {cartCount}
+          <button type="button" className="cart-btn" aria-label="Cart" onClick={() => navigate("/cart")}>
+            <span className="cart-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+                <path
+                  d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.5h7.6a2 2 0 0 0 2-1.5L21 7H7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="10" cy="19" r="1.5" fill="currentColor" />
+                <circle cx="17" cy="19" r="1.5" fill="currentColor" />
+              </svg>
             </span>
+            {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+          </button>
+
+          <Dropdown align="end" className="user-dropdown">
+              <Dropdown.Toggle className="user-toggle" id="user-menu">
+              <span className="user-label">{user ? user.name || user.email : "Account"}</span>
+              <span className={`user-avatar ${user ? "" : "user-avatar--guest"}`}>{initials}</span>
+              </Dropdown.Toggle>
+
+            <Dropdown.Menu className="user-menu">
+              {user && <Dropdown.Header className="user-header">{user.email}</Dropdown.Header>}
+              {roles?.map((r) => r.toLowerCase()).includes("admin") && (
+                <Dropdown.Item as={Link} to="/admin">
+                  Admin
+                </Dropdown.Item>
+              )}
+              {roles?.some((r) => ["chef", "admin"].includes(r.toLowerCase())) && (
+                <Dropdown.Item as={Link} to="/chef">
+                  Chef
+                </Dropdown.Item>
+              )}
+              {!user && (
+                <Dropdown.Item as={Link} to="/login">
+                  Login
+                </Dropdown.Item>
+              )}
+              {!user && (
+                <Dropdown.Item as={Link} to="/register">
+                  Register
+                </Dropdown.Item>
+              )}
+              {user && (
+                <Dropdown.Item as={Link} to="/" onClick={handleLogout}>
+                  Log out
+                </Dropdown.Item>
+              )}
+            </Dropdown.Menu>
+          </Dropdown>
+          {user && (
+            <button
+              type="button"
+              className="notify-btn"
+              onClick={() => navigate("/notifications")}
+              aria-label="Notifications"
+            >
+              🔔
+            </button>
           )}
         </div>
-<Dropdown>
-  <Dropdown.Toggle
-    variant=""
-    id="dropdown-basic"
-    style={{ padding: "0", border: "none", background: "none", marginLeft:"170px", marginTop:"15px" }}
-  >
-    {user ? (
-      <Avatar
-        alt={user.email || "User"}
-        src={user.photoURL || ""}
-        style={{
-          width: 45,
-          height: 45,
-          background: !user.photoURL ? "#2196f3" : undefined,
-          fontSize: "16px",
-          fontWeight: "bold",
-        }}
-      >
-        {!user.photoURL && user.email?.charAt(0).toUpperCase()}
-      </Avatar>
-    ) : (
-      <span style={{ fontSize: "24px" }}>👤</span>
-    )}
-  </Dropdown.Toggle>
-
-  <Dropdown.Menu>
-    {user && (
-      <Dropdown.Header style={{ fontSize: "14px", color: "#555" }}>
-        {user.email}
-      </Dropdown.Header>
-    )}
-    {role === "ADMIN" && (
-      <Dropdown.Item href="/admin">Admin</Dropdown.Item>
-    )}
-    {(role === "CHEF" || role === "ADMIN") && (
-      <Dropdown.Item href="/chef">Chef</Dropdown.Item>
-    )}
-    {!user && (
-      <Dropdown.Item href="/register">Register</Dropdown.Item>
-    )}
-    {user && (
-      <Dropdown.Item href="/" onClick={handleLogout}>
-        LogOut
-      </Dropdown.Item>
-    )}
-  </Dropdown.Menu>
-</Dropdown>
-
       </div>
-    </div>
+    </header>
   );
 }
 

@@ -1,10 +1,8 @@
-// src/pages/Register.tsx
 import { useForm, type SubmitHandler } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "../pages/admin/component/Firebase";
+import { API_URL, parseJsonResponse } from "../lib/api";
+import { setToken } from "../lib/auth";
 import { useState } from "react";
 
 type RegisterFormInputs = {
@@ -23,6 +21,8 @@ export default function Register() {
   } = useForm<RegisterFormInputs>();
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as { from?: { pathname?: string } } | undefined)?.from?.pathname || "/";
   const [isLoading, setIsLoading] = useState(false);
 
   const onSubmit: SubmitHandler<RegisterFormInputs> = async (data) => {
@@ -30,19 +30,40 @@ export default function Register() {
     setIsLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      await setDoc(doc(db, "users", user.uid), {
-        uid: user.uid,
-        name,
-        email,
-        role: "user",
-        createdAt: new Date(),
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
       });
+      if (!res.ok) {
+        const errData = await parseJsonResponse<{ detail?: string }>(res);
+        throw new Error(errData.detail || "Registration failed. Please try again.");
+      }
+      // Ro'yxatdan o'tgandan keyin token olish (OAuth2).
+      const tokenBody = new URLSearchParams();
+      tokenBody.set("username", email);
+      tokenBody.set("password", password);
+      tokenBody.set("grant_type", "password");
 
-      toast.success("Registration successful!");
-      navigate("/login");
+      const loginRes = await fetch(`${API_URL}/auth/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: tokenBody,
+      });
+      if (loginRes.ok) {
+        const payload = await parseJsonResponse<{
+          access_token: string;
+          token_type: string;
+        }>(loginRes);
+        setToken(payload.access_token);
+        toast.success("Registration successful!");
+        // Ro'yxatdan o'tgandan keyin oldingi sahifaga qaytaramiz.
+        navigate(from, { replace: true });
+      } else {
+        toast.success("Registration successful!");
+        // Agar auto-login ishlamasa, login sahifasiga yo'naltiramiz.
+        navigate("/login", { state: { from: { pathname: from } } });
+      }
     } catch (error: any) {
       toast.error(error.message || "Registration failed. Please try again.");
     } finally {
@@ -132,53 +153,6 @@ export default function Register() {
         </p>
       </div>
 
-      <style>{`
-        .bg-gradient {
-          background: linear-gradient(135deg, #6c63ff 0%, #00d4ff 100%);
-        }
-
-        .register-card {
-          width: 420px;
-          border-radius: 20px;
-          transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .register-card:hover {
-          transform: translateY(-5px);
-          box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-        }
-
-        .register-form input:focus {
-          border-color: #E21A43;
-          box-shadow: 0 0 8px rgba(226,26,67,0.3);
-          outline: none;
-        }
-
-        .register-btn {
-          background-color: #E21A43;
-          color: #fff;
-          padding: 0.6rem;
-          font-size: 1rem;
-          transition: all 0.3s;
-        }
-
-        .register-btn:hover {
-          background-color: #c01638;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 15px rgba(226,26,67,0.4);
-        }
-
-        .invalid-feedback {
-          font-size: 0.875rem;
-        }
-
-        @media(max-width: 480px) {
-          .register-card {
-            width: 90%;
-            padding: 2rem;
-          }
-        }
-      `}</style>
     </div>
   );
 }

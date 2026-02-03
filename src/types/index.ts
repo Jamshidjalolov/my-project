@@ -1,4 +1,3 @@
-
 export interface User {
   id: number;
   name: string;
@@ -28,25 +27,6 @@ export interface Todo {
   title: string;
   completed: boolean;
   userId: number;
-}
-
-export interface AppState {
-  user: {
-    name: string;
-    email: string;
-    roles: string[];
-  } | null;
-  isLoading: boolean;
-}
-
-export type Action =
-  | { type: 'SET_USER'; payload: AppState['user'] }
-  | { type: 'LOG_OUT' }
-  | { type: 'SET_LOADING' }
-
-export interface ContextValue {
-  state: AppState;
-  dispatch: React.Dispatch<Action>;
 }
 
 export interface SelectBoxProps {

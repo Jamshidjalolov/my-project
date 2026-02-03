@@ -1,28 +1,38 @@
-import axios, { type AxiosInstance } from "axios";
-
-export const client: AxiosInstance = axios.create({
-  baseURL: "http://localhost:3000",
-})
-
-
-import { Navigate } from "react-router-dom";
-import { useContextApi } from "./hooks/useContextApi";
+import type { ReactNode } from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuthRole } from "./hooks/useAuthRole";
 
 interface Props {
-  role: string;
-  children: React.ReactNode;
+  roles?: string[];
+  children: ReactNode;
 }
-function ProtectedRoute({ role, children }: Props) {
 
-  const { state: { user,isLoading } } = useContextApi();
+function ProtectedRoute({ roles, children }: Props) {
+  const { user, roles: userRoles, loading } = useAuthRole();
+  const location = useLocation();
 
-  if (!isLoading && !user?.roles.includes(role)) {
-    return <Navigate to="/" replace />;
+  if (loading) {
+    return <div style={{ padding: "2rem" }}>Loading...</div>;
   }
-  return (
-    children
-  )
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (roles && roles.length > 0) {
+    const allowed = roles.map((r) => r.toLowerCase());
+    const currentRoles =
+      userRoles && userRoles.length > 0
+        ? userRoles.map((r) => r.toLowerCase())
+        : user?.role
+          ? [user.role.toLowerCase()]
+          : ["user"];
+    if (!currentRoles.some((r) => allowed.includes(r))) {
+      return <Navigate to="/" replace />;
+    }
+  }
+
+  return children;
 }
 
-export default ProtectedRoute
-
+export default ProtectedRoute;

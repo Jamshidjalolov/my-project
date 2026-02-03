@@ -1,40 +1,36 @@
-import React from 'react'
-
 function Main2() {
   return (
-    <div>
-        <div className="main2">
-            <div className="box1">
-                <div className="img"></div>
-                <p>Fruits</p>
-            </div>
-            <div className="box2">
-                <div className="img"></div>
-                <p>Vegetables</p>
-            </div>
-            <div className="box3">
-                <div className="img"></div>
-                <p>semi-finished</p>
-            </div>
-            <div className="box4">
-                <div className="img"></div>
-                <p>Bakery</p>
-            </div>
-            <div className="box5">
-                <div className="img"></div>
-                <p>Meat</p>
-            </div>
-            <div className="box6">
-                <div className="img"></div>
-                <p>Pasta</p>
-            </div>
-            <div className="box7">
-                <div className="img"></div>
-                <p>Sweets</p>
-            </div>
-        </div>
-    </div>
-  )
+    <section className="main2" id="categories">
+      <a className="box1" href="#shop">
+        <div className="img"></div>
+        <p>Fruits</p>
+      </a>
+      <a className="box2" href="#shop">
+        <div className="img"></div>
+        <p>Vegetables</p>
+      </a>
+      <a className="box3" href="#shop">
+        <div className="img"></div>
+        <p>semi-finished</p>
+      </a>
+      <a className="box4" href="#shop">
+        <div className="img"></div>
+        <p>Bakery</p>
+      </a>
+      <a className="box5" href="#shop">
+        <div className="img"></div>
+        <p>Meat</p>
+      </a>
+      <a className="box6" href="#shop">
+        <div className="img"></div>
+        <p>Pasta</p>
+      </a>
+      <a className="box7" href="#shop">
+        <div className="img"></div>
+        <p>Sweets</p>
+      </a>
+    </section>
+  );
 }
 
 export default Main2
