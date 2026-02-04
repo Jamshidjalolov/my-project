@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite
+.netlify
+.venv
+backend/venv
 *.local
 
 # Editor directories and files
@@ -23,3 +27,5 @@ dist-ssr
 *.sln
 *.sw?
 .env
+backend/uvicorn*.err
+backend/uvicorn*.log
